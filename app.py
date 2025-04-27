@@ -41,8 +41,10 @@ class ThinkTool:
 
             return thinking_steps
 
+        except requests.exceptions.RequestException:
+            return ["🔌 Network error! Please check your internet connection and try again."]
         except Exception as e:
-            return [f"Error during thinking: {str(e)}"]
+            return [f"❗ Unexpected error during thinking: {str(e)}"]
 
     def answer(self, problem, thinking=None):
         """Generate final answer based on thinking steps."""
@@ -68,8 +70,10 @@ class ThinkTool:
             answer_text = response.get('content', [{}])[0].get('text', 'No answer generated')
             return answer_text
 
+        except requests.exceptions.RequestException:
+            return "🔌 Network error! Please check your internet connection and try again."
         except Exception as e:
-            return f"Error during answering: {str(e)}"
+            return f"❗ Unexpected error during answering: {str(e)}"
 
     def _call_claude_api(self, prompt):
         """Call Anthropic Claude API with retries."""
@@ -90,11 +94,11 @@ class ThinkTool:
                 response = requests.post(self.api_url, headers=headers, json=data, timeout=15)
 
                 if response.status_code == 401:
-                    raise Exception("Unauthorized: Invalid API Key.")
+                    raise Exception("Unauthorized: Invalid API Key. 🔑")
                 elif response.status_code == 429:
-                    raise Exception("Rate limit exceeded. Please try again later.")
+                    raise Exception("Rate limit exceeded. ⏳ Please try again later.")
                 elif response.status_code >= 500:
-                    raise Exception(f"Server error ({response.status_code}). Try again later.")
+                    raise Exception(f"Server error ({response.status_code}). ☁️ Try again later.")
                 elif response.status_code != 200:
                     raise Exception(f"Request failed: {response.status_code} {response.text}")
 
@@ -186,7 +190,7 @@ if st.button("Solve"):
                 )
 
             except Exception as e:
-                st.error(f"Oops! {e}")
+                st.error(f"❗ Oops! {e}")
 
 # --- Sidebar: Show previous problems (optional) ---
 if "history" in st.session_state and st.session_state.history:
