@@ -15,57 +15,64 @@ class ThinkTool:
 
     def think(self, problem):
         """Generate structured thinking steps using Claude API."""
-        prompt = f"""
-        I need to solve this problem: {problem}
-        
-        Please help me think through this step-by-step.
-        Only provide individual steps, each starting with "Step: ".
-        Don't provide a final answer yet.
-        """
-        response = self._call_claude_api(prompt)
-        
-        thinking_text = response.get('content', [{}])[0].get('text', '')
-        thinking_steps = [
-            step.replace("Step: ", "").strip()
-            for step in thinking_text.split('\n')
-            if step.strip().startswith("Step:")
-        ]
+        try:
+            prompt = f"""
+            I need to solve this problem: {problem}
+            
+            Please help me think through this step-by-step.
+            Only provide individual steps, each starting with "Step: ".
+            Don't provide a final answer yet.
+            """
+            response = self._call_claude_api(prompt)
 
-        # Fallback if no "Step:" found
-        if not thinking_steps:
+            thinking_text = response.get('content', [{}])[0].get('text', '')
             thinking_steps = [
-                line.strip()
-                for line in thinking_text.split('\n')
-                if line.strip()
+                step.replace("Step: ", "").strip()
+                for step in thinking_text.split('\n')
+                if step.strip().startswith("Step:")
             ]
 
-        return thinking_steps
+            if not thinking_steps:
+                thinking_steps = [
+                    line.strip()
+                    for line in thinking_text.split('\n')
+                    if line.strip()
+                ]
+
+            return thinking_steps
+
+        except Exception as e:
+            return [f"Error during thinking: {str(e)}"]
 
     def answer(self, problem, thinking=None):
         """Generate final answer based on thinking steps."""
-        if thinking:
-            thinking_text = "\n".join([f"- {step}" for step in thinking])
-            prompt = f"""
-            Problem: {problem}
+        try:
+            if thinking:
+                thinking_text = "\n".join([f"- {step}" for step in thinking])
+                prompt = f"""
+                Problem: {problem}
 
-            Thinking steps:
-            {thinking_text}
+                Thinking steps:
+                {thinking_text}
 
-            Now, based on the above, provide a clear final answer without repeating all steps.
-            """
-        else:
-            prompt = f"""
-            Problem: {problem}
+                Now, based on the above, provide a clear final answer without repeating all steps.
+                """
+            else:
+                prompt = f"""
+                Problem: {problem}
 
-            What is the final answer? Provide a clear and concise solution.
-            """
-        
-        response = self._call_claude_api(prompt)
-        answer_text = response.get('content', [{}])[0].get('text', 'No answer generated')
-        return answer_text
+                What is the final answer? Provide a clear and concise solution.
+                """
+
+            response = self._call_claude_api(prompt)
+            answer_text = response.get('content', [{}])[0].get('text', 'No answer generated')
+            return answer_text
+
+        except Exception as e:
+            return f"Error during answering: {str(e)}"
 
     def _call_claude_api(self, prompt):
-        """Call Anthropic Claude API."""
+        """Call Anthropic Claude API with better error handling."""
         headers = {
             "x-api-key": self.api_key,
             "anthropic-version": "2023-06-01",
@@ -77,12 +84,24 @@ class ThinkTool:
             "messages": [{"role": "user", "content": prompt}]
         }
 
-        response = requests.post(self.api_url, headers=headers, json=data)
+        try:
+            response = requests.post(self.api_url, headers=headers, json=data, timeout=15)
 
-        if response.status_code != 200:
-            raise Exception(f"API request failed [{response.status_code}]: {response.text}")
+            if response.status_code == 401:
+                raise Exception("Unauthorized: Invalid API Key.")
+            elif response.status_code == 429:
+                raise Exception("Rate limit exceeded. Please try again later.")
+            elif response.status_code >= 500:
+                raise Exception(f"Server error ({response.status_code}). Try again after some time.")
+            elif response.status_code != 200:
+                raise Exception(f"Request failed: {response.status_code} {response.text}")
 
-        return response.json()
+            return response.json()
+
+        except requests.exceptions.Timeout:
+            raise Exception("Request timed out. Please try again.")
+        except requests.exceptions.RequestException as e:
+            raise Exception(f"Request failed: {str(e)}")
 
 # --- Streamlit App UI ---
 
@@ -114,7 +133,7 @@ if st.button("Solve"):
     else:
         tool = ThinkTool(api_key, model)
 
-        with st.spinner("Thinking...") as spinner:  # Enhanced spinner with dots animation
+        with st.spinner("Thinking..."):
             try:
                 # Generate thinking steps
                 thinking = tool.think(problem)
@@ -124,14 +143,13 @@ if st.button("Solve"):
 
                 # Typing-style animation for thinking steps
                 st.subheader("🧠 Thinking Steps:")
-                placeholder = st.empty()  # Placeholder for live update
-                full_text = ""  # Initialize empty text
+                placeholder = st.empty()
+                full_text = ""
 
-                # Display thinking step-by-step with animation
                 for step in thinking:
                     full_text += f"- {step}\n"
                     placeholder.markdown(full_text)
-                    time.sleep(0.5)  # Small delay for animation effect
+                    time.sleep(0.5)
 
                 # Display final answer
                 st.subheader("✅ Final Answer:")
@@ -165,7 +183,7 @@ if st.button("Solve"):
                 )
 
             except Exception as e:
-                st.error(f"Error: {e}")
+                st.error(f"Oops! {e}")
 
 # --- Sidebar: Show previous problems (optional) ---
 if "history" in st.session_state and st.session_state.history:
