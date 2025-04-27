@@ -11,11 +11,18 @@ class ThinkTool:
         self.api_key = api_key
         self.model = model
         self.show_thinking = show_thinking
-        self.api_url = "https://api.anthropic.com/v1/messages"
+        self.api_url = self._get_api_url()  # Dynamically set the correct API URL
         self.max_tokens = max_tokens  # Dynamically adjustable max_tokens
 
+    def _get_api_url(self):
+        """Return the correct API URL for Claude."""
+        if "claude" in self.model.lower():
+            return "https://api.anthropic.com/v1/messages"  # Claude API endpoint
+        else:
+            raise ValueError(f"Unknown model: {self.model}")
+
     def think(self, problem):
-        """Generate structured thinking steps using Claude API."""
+        """Generate structured thinking steps using the Claude model."""
         try:
             prompt = f"""
             I need to solve this problem: {problem}
@@ -24,7 +31,7 @@ class ThinkTool:
             Only provide individual steps, each starting with "Step: ".
             Don't provide a final answer yet.
             """
-            response = self._call_claude_api(prompt)
+            response = self._call_api(prompt)
 
             thinking_text = response.get('content', [{}])[0].get('text', '')
             thinking_steps = [
@@ -65,23 +72,23 @@ class ThinkTool:
                 What is the final answer? Provide a clear and concise solution.
                 """
 
-            response = self._call_claude_api(prompt)
+            response = self._call_api(prompt)
             answer_text = response.get('content', [{}])[0].get('text', 'No answer generated')
             return answer_text
 
         except Exception as e:
             return f"Error during answering: {str(e)}"
 
-    def _call_claude_api(self, prompt):
-        """Call Anthropic Claude API with retries."""
+    def _call_api(self, prompt):
+        """Call the Claude API with retries."""
         headers = {
-            "x-api-key": self.api_key,
-            "anthropic-version": "2023-06-01",
-            "content-type": "application/json"
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
         }
+
         data = {
             "model": self.model,
-            "max_tokens": self.max_tokens,  # Dynamically set max_tokens
+            "max_tokens": self.max_tokens,
             "messages": [{"role": "user", "content": prompt}]
         }
 
@@ -118,14 +125,13 @@ st.sidebar.header("Settings")
 # Input: API Key (hidden)
 api_key = st.sidebar.text_input("API Key", type="password")
 
-# Select Model
-model = st.sidebar.selectbox("Model", [
-    "claude-3-5-sonnet-20241022",
-    "claude-3-7-sonnet-20250219",
-    "claude-3-5-haiku-20241022"
+# Select Claude Model
+model = st.sidebar.selectbox("Select Claude Model", [
+    "claude-3-5-sonnet-20241022",  
+    "claude-3-7-sonnet-20250219", 
 ])
 
-# Select Thinking Detail Level (New Feature)
+# Select Thinking Detail Level
 thinking_detail = st.sidebar.radio(
     "Choose the level of thinking detail:",
     ("Short", "Medium", "Detailed"),
