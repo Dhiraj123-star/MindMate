@@ -72,7 +72,7 @@ class ThinkTool:
             return f"Error during answering: {str(e)}"
 
     def _call_claude_api(self, prompt):
-        """Call Anthropic Claude API with better error handling."""
+        """Call Anthropic Claude API with retries."""
         headers = {
             "x-api-key": self.api_key,
             "anthropic-version": "2023-06-01",
@@ -84,24 +84,27 @@ class ThinkTool:
             "messages": [{"role": "user", "content": prompt}]
         }
 
-        try:
-            response = requests.post(self.api_url, headers=headers, json=data, timeout=15)
+        max_retries = 3  # Retry 3 times max
+        for attempt in range(1, max_retries + 1):
+            try:
+                response = requests.post(self.api_url, headers=headers, json=data, timeout=15)
 
-            if response.status_code == 401:
-                raise Exception("Unauthorized: Invalid API Key.")
-            elif response.status_code == 429:
-                raise Exception("Rate limit exceeded. Please try again later.")
-            elif response.status_code >= 500:
-                raise Exception(f"Server error ({response.status_code}). Try again after some time.")
-            elif response.status_code != 200:
-                raise Exception(f"Request failed: {response.status_code} {response.text}")
+                if response.status_code == 401:
+                    raise Exception("Unauthorized: Invalid API Key.")
+                elif response.status_code == 429:
+                    raise Exception("Rate limit exceeded. Please try again later.")
+                elif response.status_code >= 500:
+                    raise Exception(f"Server error ({response.status_code}). Try again later.")
+                elif response.status_code != 200:
+                    raise Exception(f"Request failed: {response.status_code} {response.text}")
 
-            return response.json()
+                return response.json()
 
-        except requests.exceptions.Timeout:
-            raise Exception("Request timed out. Please try again.")
-        except requests.exceptions.RequestException as e:
-            raise Exception(f"Request failed: {str(e)}")
+            except (requests.exceptions.Timeout, requests.exceptions.RequestException) as e:
+                if attempt == max_retries:
+                    raise Exception(f"Request failed after {max_retries} attempts. Error: {str(e)}")
+                else:
+                    time.sleep(1)  # Wait 1 second before retrying
 
 # --- Streamlit App UI ---
 
